@@ -79,13 +79,12 @@ class CpcGenericAnalyzer:
         i = 0
         while i < len(self.critical_path):
             provider = [self.critical_path[i]]
-            k = i + 1
+            i = i + 1
             # 연속된 임계 경로 노드들을 하나의 프로바이더로 묶음
-            while k < len(self.critical_path) and set(self.predecessors[self.critical_path[k]]) == {self.critical_path[k-1]}:
-                provider.append(self.critical_path[k])
-                k += 1
+            while i < len(self.critical_path) and set(self.predecessors[self.critical_path[i]]) == {self.critical_path[i-1]}:
+                provider.append(self.critical_path[i])
+                i += 1
             providers.append(provider)
-            i = k
             
         consumers_F = {}
         consumers_G = {}
