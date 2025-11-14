@@ -29,6 +29,7 @@ class CpcGenericAnalyzer:
         self.m = m
         self.nodes = list(dag.keys())
         self.predecessors = {n: get_predecessors(dag, n) for n in self.nodes}
+        self.all_ancestors = {n: get_ancestors(dag, n) for n in self.nodes}
         
         # 1. 임계 경로 찾기 및 CPC 모델 구성
         self.critical_path = self._find_critical_path()
@@ -106,12 +107,13 @@ class CpcGenericAnalyzer:
             # G(θi): F(θi)와 병렬 실행 가능하지만 θi+1을 직접 지연시키지 않는 노드
             g_theta_i = set()
             for vj in f_theta_i:
-                for vk in self.nodes:
+                for vk in remaining_V_minus:
                      # C(vj) \ V-
                     if vk not in get_ancestors(self.dag, vj) and vk not in get_descendants_and_self(self.dag, vj):
-                       if vk in remaining_V_minus:
-                           g_theta_i.add(vk)
+                        g_theta_i.add(vk)
             
+            # WARN: 왜인지 모르겠는데, 논문에서는 v_j 와 병렬가능한 애들의 합집합으로 나오는 바람에 v_j들 (F(θi))이 같이 들어가 버린다.
+            # 이건 아닌거 같아서 빼준다, 논문에서 오타낸듯?
             g_theta_i = g_theta_i - f_theta_i
             consumers_G[tuple(theta_i)] = g_theta_i
             
@@ -119,50 +121,83 @@ class CpcGenericAnalyzer:
 
         return providers, consumers_F, consumers_G
 
-    @lru_cache(maxsize=None)
-    def _calculate_finish_time(self, v):
-        # Equation (3) - 제네릭 케이스 (간단한 버전)
-        # 실제 논문은 Ac(vj)\λ* < m-1 조건을 확인하지만, 제네릭 분석을 위해
-        # 모든 non-critical 노드가 간섭을 겪는다고 가정
-        if v in self.critical_path:
-             # 임계 경로 노드는 이전 임계 경로 노드가 끝나면 바로 시작 (간섭 없음)
-             preds = self.predecessors[v]
-             max_pred_finish = 0
-             if preds:
-                 max_pred_finish = max(self._calculate_finish_time(p) for p in preds)
-             return max_pred_finish + self.dag[v]['wcet']
-
-        # 비-임계 경로 노드
-        concurrent_nodes = self.nodes # 단순화를 위해 모든 노드가 잠재적 간섭자로 가정
-        interference_workload = sum(self.dag[c]['wcet'] for c in concurrent_nodes if c not in self.critical_path and c != v)
-        interference_delay = interference_workload / (self.m - 1) if self.m > 1 else float('inf')
-        
-        max_pred_finish = 0
-        if self.predecessors[v]:
-            max_pred_finish = max(self._calculate_finish_time(p) for p in self.predecessors[v])
-            
-        return max_pred_finish + self.dag[v]['wcet'] + interference_delay
 
     def _calculate_all_finish_times(self):
-        # f(v) 계산은 위상 정렬 순서로 진행하면 재귀 없이 효율적으로 가능
-        # 여기서는 재귀적 구현을 단순화하여 보여줌
-        # 실제로는 매우 비관적인 가정을 사용한 계산이 됨
-        # 제네릭 α, β 계산을 위한 단순화된 f(v)
-        f = {}
-        # 소스 노드부터 시작
-        q = collections.deque([n for n in self.nodes if not self.predecessors[n]])
-        visited_topo = set(q)
-        f.update({n: self.dag[n]['wcet'] for n in q})
+        """
+        논문의 Equation (3), (4)를 반영하여 모든 노드의 finish time f(v)를 계산합니다.
+        재귀 호출과 메모이제이션(lru_cache)을 사용합니다.
+        """
+        # lru_cache를 사용하여 finish_time_recursive의 결과를 캐싱합니다.
+        # 이렇게 하면 각 노드의 finish_time이 한 번만 계산됩니다.
+        for node in self.nodes:
+            self._finish_time_recursive(node)
         
-        while q:
-            u = q.popleft()
-            for v in self.dag[u]['successors']:
-                if v not in visited_topo:
-                    max_pred_f = max(f.get(p, 0) for p in self.predecessors[v])
-                    f[v] = max_pred_f + self.dag[v]['wcet']
-                    visited_topo.add(v)
-                    q.append(v)
-        return f
+        # 캐시된 결과를 딕셔너리로 변환하여 반환
+        return {node: self._finish_time_recursive(node) for node in self.nodes}
+
+    @lru_cache(maxsize=None)
+    def _finish_time_recursive(self, v):
+        """ Equation (3)을 재귀적으로 계산하는 함수 """
+        wcet_v = self.dag[v]['wcet']
+        
+        # max_{vk in pre(vj)} {f(vk)}
+        max_pred_finish = 0
+        if self.predecessors[v]:
+            max_pred_finish = max(self._finish_time_recursive(p) for p in self.predecessors[v])
+            
+        # 간섭(Interference) 항 계산
+        interference_delay = 0
+        
+        # 비-임계 경로 노드에 대해서만 간섭을 계산
+        if v not in self.critical_path:
+            # Equation (4)에 따라 간섭 집합 I(v) 계산
+            interference_set_I_v = self._get_interference_set(v)
+            
+            # 간섭 작업량 계산
+            interference_workload = sum(self.dag[i_node]['wcet'] for i_node in interference_set_I_v)
+            
+            # 간섭으로 인한 지연 시간 계산 (m-1개 코어에서 처리)
+            # 제네릭 케이스이므로 1/(m-1)로 나눔
+            if self.m > 1 and interference_workload > 0:
+                interference_delay = interference_workload / (self.m - 1)
+
+        # f(vj) = Cj + max_{...} + interference
+        return wcet_v + max_pred_finish + interference_delay
+
+    def _get_interference_set(self, v):
+        """
+        Equation (4)를 구현: 노드 v에 대한 간섭 집합 I(v)를 반환합니다.
+        I(vj) = {vk | vk not in X* AND vk not in U_{vr in anc(vj)} C(vr), vk in C(vj)}
+        """
+        # C(v): v와 동시 실행 가능한 노드 집합
+        # C(vj) = {vk | vk != (anc(vj) U des(vj) U {vj}))}
+        v_ancestors = self.all_ancestors[v]
+        v_descendants = get_descendants_and_self(self.dag, v)
+        concurrent_to_v = set(self.nodes) - v_ancestors - v_descendants
+
+        # U_{vr in anc(vj)} C(vr): v의 조상들과 동시 실행 가능한 노드 집합
+        # 간섭 집합 I(vr)은 논문에서 I(vj)와 동일한 방식으로 계산됨
+        # 제네릭 분석에서는 이 부분을 단순화하여 v의 조상을 방해할 수 없는 노드, 
+        # 즉 v와 진정한 의미에서 동시 실행되는 노드만 고려
+        # I(vj)는 v와 동시 실행 가능(concurrent_to_v)하면서
+        # v의 조상들과는 의존성이 없는 비-임계 노드들.
+        interference_set = set()
+        for vk in concurrent_to_v:
+            if vk in self.critical_path:
+                continue
+
+            # vk가 v의 어떤 조상과도 의존성이 없는지 확인
+            # (vk가 어떤 조상의 자손도 아니고, 어떤 조상의 조상도 아님)
+            is_independent_of_ancestors = True
+            for ancestor in v_ancestors:
+                if vk in self.all_ancestors[ancestor] or ancestor in self.all_ancestors[vk]:
+                    is_independent_of_ancestors = False
+                    break
+            
+            if is_independent_of_ancestors:
+                 interference_set.add(vk)
+        
+        return interference_set
 
     def analyze(self):
         total_response_time = 0
