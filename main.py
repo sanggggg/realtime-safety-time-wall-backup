@@ -1,5 +1,72 @@
+import argparse
 import collections
+import json
+import re
+from pathlib import Path
 from functools import lru_cache
+
+
+def _parse_execution_time(raw_value):
+    """
+    Normalize execution_time_ms field which may be a float or a string like '2.95/iter'.
+    Returns the first float found in the string.
+    """
+    if isinstance(raw_value, (int, float)):
+        return float(raw_value)
+    if isinstance(raw_value, str):
+        match = re.search(r"[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?", raw_value)
+        if match:
+            return float(match.group(0))
+    raise ValueError(f"Unsupported execution_time_ms value: {raw_value!r}")
+
+
+DEFAULT_INPUT_PATH = Path(__file__).with_name("input_dag.json")
+
+
+def load_dag_from_file(json_path):
+    """
+    Parse the CPC input DAG JSON into the internal representation used by the analyzer.
+    Returns (dag_dict, metadata_dict)
+    """
+    json_path = Path(json_path)
+    with json_path.open("r", encoding="utf-8") as fp:
+        data = json.load(fp)
+
+    nodes_data = data.get("nodes", [])
+    dag = {}
+
+    # Initialize nodes
+    for node in nodes_data:
+        node_id = node["id"]
+        dag[node_id] = {
+            "wcet": _parse_execution_time(node["execution_time_ms"]),
+            "successors": []
+        }
+
+    # Populate successors using the dependencies list (which lists predecessors)
+    for node in nodes_data:
+        for dependency in node.get("dependencies", []):
+            if dependency not in dag:
+                raise KeyError(f"Dependency {dependency} referenced by {node['id']} not found in DAG.")
+            dag[dependency]["successors"].append(node["id"])
+
+    return dag, data.get("metadata", {})
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Analyze DAG makespan using CPC Generic model.")
+    parser.add_argument(
+        "--dag-path",
+        type=Path,
+        default=DEFAULT_INPUT_PATH,
+        help=f"Path to DAG description JSON (default: {DEFAULT_INPUT_PATH})",
+    )
+    parser.add_argument(
+        "--num-cores",
+        type=int,
+        help="Override number of cores (otherwise taken from metadata.num_cores)",
+    )
+    return parser.parse_args()
 
 # --- Helper Functions ---
 def get_predecessors(dag, node):
@@ -298,23 +365,22 @@ def get_descendants_and_self(dag, node):
                 q.append(succ)
     return descendants
     
-# --- 예제 실행 ---
-if __name__ == "__main__":
-    dag_example = {
-        'v1': {'wcet': 1, 'successors': ['v2', 'v3', 'v5', 'v6']},
-        'v2': {'wcet': 7, 'successors': ['v4']},
-        'v3': {'wcet': 2, 'successors': ['v4']},
-        'v4': {'wcet': 3, 'successors': ['v8']},
-        'v5': {'wcet': 2, 'successors': ['v7']},
-        'v6': {'wcet': 4, 'successors': ['v7']},
-        'v7': {'wcet': 3, 'successors': ['v8']},
-        'v8': {'wcet': 4, 'successors': []}
-    }
-    num_cores = 2
+def main():
+    args = parse_args()
+    dag, metadata = load_dag_from_file(args.dag_path)
 
-    print(f"Analyzing makespan with CPC model (Generic) on {num_cores} cores...\n")
-    analyzer = CpcGenericAnalyzer(dag_example, num_cores)
-    
+    num_cores = args.num_cores if args.num_cores is not None else metadata.get("num_cores")
+    if num_cores is None:
+        raise ValueError(
+            "Number of cores not provided. Set metadata.num_cores in the JSON or pass --num-cores."
+        )
+    num_cores = int(num_cores)
+
+    print(f"Analyzing makespan with CPC model (Generic) on {num_cores} cores...")
+    print(f"Loaded DAG from {args.dag_path}\n")
+
+    analyzer = CpcGenericAnalyzer(dag, num_cores)
+
     print("--- CPC Model Constructed ---")
     print(f"Critical Path: {analyzer.critical_path}")
     for p in analyzer.providers:
@@ -326,3 +392,7 @@ if __name__ == "__main__":
     max_makespan = analyzer.analyze()
 
     print(f"\nFinal Calculated Max Makespan (CPC Generic): {max_makespan:.2f}")
+
+
+if __name__ == "__main__":
+    main()
