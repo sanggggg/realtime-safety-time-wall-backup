@@ -119,9 +119,7 @@ The input JSON file should contain:
 ├── cpc_analyzer.py              # CPC model analysis implementation
 ├── time_wall_calculator.py      # Time wall calculation for self-looping nodes
 ├── input_dag.json               # Example input DAG
-├── dag_example.json             # Additional example
 ├── README.md                    # This file
-├── TIME_WALL_USAGE.md           # Detailed time wall usage guide
 └── pyproject.toml               # Project dependencies
 ```
 
