@@ -6,7 +6,6 @@ A tool for analyzing Directed Acyclic Graphs (DAGs) using the CPC (Critical Path
 
 - **CPC Generic Model Analysis**: Analyzes DAG makespan using the CPC model for multicore systems
 - **Time Wall Calculation**: Calculates safe execution time budgets for self-looping nodes
-- **DAG Visualization**: Beautiful graph visualizations with multiple layout algorithms
 - **Flexible Input**: Supports JSON-based DAG descriptions
 - **Configurable**: Command-line options for cores, deadline, and analysis modes
 - **Safety Analysis**: Supports separate normal and safety backup DAG configurations
@@ -23,11 +22,6 @@ uv sync
 pip install -e .
 ```
 
-### Dependencies
-
-- `matplotlib>=3.8.0`: For DAG visualization
-- `networkx>=3.2.0`: For graph analysis and layout
-
 ## Quick Start
 
 ### Basic CPC Analysis
@@ -36,21 +30,6 @@ Analyze a DAG's makespan:
 
 ```bash
 python3 main.py
-```
-
-### DAG Visualization
-
-Visualize the DAG structure:
-
-```bash
-# Display interactive visualization
-python3 main.py --visualize
-
-# Save visualization to file
-python3 main.py --visualize --viz-output dag.png
-
-# Use standalone visualizer
-python3 dag_visualizer.py input_dag.json -o dag.png
 ```
 
 ### Time Wall Calculation
@@ -75,10 +54,6 @@ python3 main.py [OPTIONS]
 - `--calc-time-wall`: Calculate time wall for self-looping nodes
 - `--safety-dag-path SAFETY_DAG_PATH`: Path to safety backup DAG JSON (optional; if not specified, only normal mode is analyzed)
 - `--deadline DEADLINE`: Deadline in ms (otherwise from metadata)
-- `--visualize`: Generate DAG visualization
-- `--viz-output VIZ_OUTPUT`: Path to save visualization (e.g., dag.png)
-- `--viz-layout {hierarchical,spring,circular}`: Layout algorithm for visualization
-- `--viz-stats`: Print DAG statistics before visualization
 
 ### Examples
 
@@ -105,22 +80,6 @@ python3 main.py --calc-time-wall --safety-dag-path safety_backup_dag.json
 **Full analysis with verbose output:**
 ```bash
 python3 main.py --calc-time-wall --verbose --num-cores 8
-```
-
-**Visualize with statistics:**
-```bash
-python3 main.py --visualize --viz-stats --viz-output dag.png
-```
-
-**Visualize with critical path highlighted:**
-```bash
-python3 main.py --visualize --viz-output dag.png
-```
-
-**Use different layout algorithms:**
-```bash
-python3 main.py --visualize --viz-layout spring --viz-output dag_spring.png
-python3 main.py --visualize --viz-layout circular --viz-output dag_circular.png
 ```
 
 ## Input Format
@@ -159,12 +118,10 @@ The input JSON file should contain:
 ├── main.py                      # Main entry point
 ├── cpc_analyzer.py              # CPC model analysis implementation
 ├── time_wall_calculator.py      # Time wall calculation for self-looping nodes
-├── dag_visualizer.py            # DAG visualization tool
 ├── input_dag.json               # Example input DAG
 ├── dag_example.json             # Additional example
 ├── README.md                    # This file
 ├── TIME_WALL_USAGE.md           # Detailed time wall usage guide
-├── DAG_VISUALIZATION.md         # DAG visualization guide
 └── pyproject.toml               # Project dependencies
 ```
 
@@ -185,16 +142,6 @@ Calculates safe execution time budgets for self-looping nodes:
 - When safety backup DAG is provided, returns minimum of both budgets
 - When safety backup DAG is not provided, returns normal mode budget only
 - Deadline-aware budget allocation
-
-### DAG Visualizer (`dag_visualizer.py`)
-
-Generates visual representations of DAG structure:
-- Multiple layout algorithms (hierarchical, spring, circular)
-- Color-coded node types (default, provider, self-loop)
-- Critical path highlighting
-- Interactive or file-based output
-- DAG statistics reporting
-- Provider group visualization
 
 ## Self-Looping Nodes
 
@@ -228,14 +175,6 @@ The tool provides:
      - Final time wall (minimum of both)
    - If safety backup DAG not provided:
      - Final time wall (e_norm only)
-
-3. **Visualization Output** (when `--visualize` is enabled):
-   - DAG structure with color-coded nodes
-   - Critical path highlighted (after analysis)
-   - Node execution times and types
-   - Statistical information
-
-See [DAG_VISUALIZATION.md](DAG_VISUALIZATION.md) for detailed visualization guide.
 
 ## References
 

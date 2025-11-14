@@ -33,7 +33,8 @@ def load_dag_from_file(json_path):
         node_id = node["id"]
         dag[node_id] = {
             "wcet": _parse_execution_time(node["execution_time_ms"]),
-            "successors": []
+            "successors": [],
+            "type": node.get("type", "default")
         }
 
     for node in nodes_data:

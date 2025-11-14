@@ -153,8 +153,3 @@ Thumbs.db
 # Project specific
 *.pdf
 
-# Generated visualizations
-dag_visualization.png
-dag_integrated*.png
-*_critical_path.png
-

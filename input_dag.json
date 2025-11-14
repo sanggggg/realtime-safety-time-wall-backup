@@ -290,7 +290,7 @@
         "execution_time_ms": 5.194,
         "type": "default",
         "dependencies": [
-          "/perception/object_recognition/tracking/multi_object_tracker"
+          "/perception/object_recognition/tracking/decorative_tracker_merger"
         ]
       },
       {

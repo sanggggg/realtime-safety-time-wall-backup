@@ -1,4 +1,5 @@
 from __future__ import annotations
+from math import floor
 
 from cpc_analyzer import CpcGenericAnalyzer
 
@@ -38,7 +39,6 @@ class TimeWallCalculator:
             analyzer_emax = CpcGenericAnalyzer(dag_with_emax, self.m, verbose=False)
             
             vs_segment_tuple = None
-            print("!!! PROVIDERS: ", analyzer_emax.providers)
             for p_tuple in analyzer_emax.providers:
                 if self.vs in p_tuple:
                     vs_segment_tuple = tuple(p_tuple)
@@ -87,33 +87,34 @@ class TimeWallCalculator:
             print("Warning: e_init is negative. Setting to 0.")
             e_init = 0.0
 
-        low_bound_e = e_init
-        high_bound_e = e_max
-        optimal_e = 0.0
+        e_s = self.normal_dag[self.vs]['wcet']
+        low_bound_l = floor(e_init / e_s)
+        high_bound_l = floor(e_max / e_s) + 1 # NOTE: +1 because we want to include the high bound in the search
+        optimal_l = 0.0
         
         for _ in range(100):
-            if high_bound_e < low_bound_e:
+            if high_bound_l < low_bound_l:
                 break
             
-            mid_e = (low_bound_e + high_bound_e) / 2
+            mid_l = floor((low_bound_l + high_bound_l) / 2)
             
             current_dag = {k: v.copy() for k, v in dag.items()}
-            current_dag[self.vs]['wcet'] = mid_e
+            current_dag[self.vs]['wcet'] = mid_l * e_s
 
             try:
                 analyzer = CpcGenericAnalyzer(current_dag, self.m, verbose=False)
                 response_time, _ = analyzer.analyze()
                 
                 if response_time <= self.D:
-                    optimal_e = mid_e
-                    low_bound_e = mid_e
+                    optimal_l = mid_l
+                    low_bound_l = mid_l
                 else:
-                    high_bound_e = mid_e
+                    high_bound_l = mid_l - 1
             except Exception:
-                high_bound_e = mid_e
+                high_bound_l = mid_l
 
-        print(f"Found optimal budget for {mode_name}: {optimal_e:.2f}")
-        return optimal_e
+        print(f"Found optimal budget for {mode_name}: {optimal_l * e_s:.2f}")
+        return optimal_l * e_s
 
     def calculate_time_wall(self) -> float:
         e_norm = self._calculate_budget_for_dag(self.normal_dag, "Normal")

@@ -57,32 +57,100 @@ class CpcGenericAnalyzer:
         self.finish_times = self._calculate_all_finish_times()
 
     def _find_critical_path(self) -> List[str]:
+        # Find self_loop node(s)
+        self_loop_nodes = [n for n in self.nodes if self.dag[n].get('type') == 'self_loop']
+        
+        # Calculate longest path from source to all nodes (forward pass)
         in_degree = {n: 0 for n in self.nodes}
         for n in self.nodes:
             for succ in self.dag[n]['successors']:
                 in_degree[succ] += 1
         
         source_nodes = [n for n in self.nodes if in_degree[n] == 0]
-        q = collections.deque(source_nodes)
+        sink_nodes = [n for n in self.nodes if not self.dag[n]['successors']]
         
-        # Initialize dist: source nodes get their wcet, others get 0
-        dist = {n: 0 for n in self.nodes}
+        # Forward pass: longest distance from source to each node
+        q = collections.deque(source_nodes)
+        dist_forward = {n: 0 for n in self.nodes}
         for n in source_nodes:
-            dist[n] = self.dag[n]['wcet']
+            dist_forward[n] = self.dag[n]['wcet']
         
         path_pred = {n: None for n in self.nodes}
+        in_degree_copy = in_degree.copy()
 
         while q:
             u = q.popleft()
             for v in self.dag[u]['successors']:
-                if dist[u] + self.dag[v]['wcet'] > dist[v]:
-                    dist[v] = dist[u] + self.dag[v]['wcet']
+                if dist_forward[u] + self.dag[v]['wcet'] > dist_forward[v]:
+                    dist_forward[v] = dist_forward[u] + self.dag[v]['wcet']
                     path_pred[v] = u
-                in_degree[v] -= 1
-                if in_degree[v] == 0:
+                in_degree_copy[v] -= 1
+                if in_degree_copy[v] == 0:
                     q.append(v)
         
-        sink_node = next(n for n in self.nodes if not self.dag[n]['successors'])
+        # Backward pass: longest distance from each node to sink
+        # Build reverse graph
+        reverse_graph = {n: [] for n in self.nodes}
+        out_degree = {n: 0 for n in self.nodes}
+        for n in self.nodes:
+            for succ in self.dag[n]['successors']:
+                reverse_graph[succ].append(n)
+                out_degree[n] += 1
+        
+        q_back = collections.deque(sink_nodes)
+        dist_backward = {n: 0 for n in self.nodes}
+        for n in sink_nodes:
+            dist_backward[n] = self.dag[n]['wcet']
+        
+        path_succ = {n: None for n in self.nodes}
+        out_degree_copy = out_degree.copy()
+        
+        while q_back:
+            v = q_back.popleft()
+            for u in reverse_graph[v]:
+                if dist_backward[v] + self.dag[u]['wcet'] > dist_backward[u]:
+                    dist_backward[u] = dist_backward[v] + self.dag[u]['wcet']
+                    path_succ[u] = v
+                out_degree_copy[u] -= 1
+                if out_degree_copy[u] == 0:
+                    q_back.append(u)
+        
+        # If there's a self_loop node, force critical path through it
+        if self_loop_nodes:
+            # Find the self_loop node with maximum path length through it
+            best_self_loop = None
+            best_length = -1
+            
+            for sl_node in self_loop_nodes:
+                # Total length through this self_loop node
+                # dist_forward includes wcet of sl_node, dist_backward includes wcet of sl_node
+                # So we subtract it once to avoid double counting
+                total_length = dist_forward[sl_node] + dist_backward[sl_node] - self.dag[sl_node]['wcet']
+                
+                if total_length > best_length:
+                    best_length = total_length
+                    best_self_loop = sl_node
+            
+            # Reconstruct path: source -> best_self_loop -> sink
+            # Path from source to best_self_loop (backwards)
+            path_to_sl = []
+            curr = best_self_loop
+            while curr:
+                path_to_sl.append(curr)
+                curr = path_pred[curr]
+            path_to_sl = path_to_sl[::-1]
+            
+            # Path from best_self_loop to sink (forwards)
+            path_from_sl = []
+            curr = path_succ[best_self_loop]
+            while curr:
+                path_from_sl.append(curr)
+                curr = path_succ[curr]
+            
+            return path_to_sl + path_from_sl
+        
+        # If no self_loop node, use original algorithm
+        sink_node = sink_nodes[0] if sink_nodes else self.nodes[-1]
         
         cp = []
         curr = sink_node
