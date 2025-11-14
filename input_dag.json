@@ -6,8 +6,8 @@
     },
     "nodes": [
       {
-        "id": "/carla_tos_bridge",
-        "name": "/carla_tos_bridge",
+        "id": "/carla_ros_bridge",
+        "name": "/carla_ros_bridge",
         "execution_time_ms": 4.033,
         "type": "provider",
         "provider_group": 1,
@@ -19,7 +19,7 @@
         "execution_time_ms": 2.632,
         "type": "default",
         "dependencies": [
-          "/carla_tos_bridge"
+          "/carla_ros_bridge"
         ]
       },
       {
@@ -29,7 +29,7 @@
         "type": "provider",
         "provider_group": 1,
         "dependencies": [
-          "/carla_tos_bridge"
+          "/carla_ros_bridge"
         ]
       },
       {
@@ -38,7 +38,7 @@
         "execution_time_ms": 4.226,
         "type": "default",
         "dependencies": [
-          "/carla_tos_bridge"
+          "/carla_ros_bridge"
         ]
       },
       {
@@ -47,7 +47,7 @@
         "execution_time_ms": 0.947,
         "type": "default",
         "dependencies": [
-          "/carla_tos_bridge"
+          "/carla_ros_bridge"
         ]
       },
       {
