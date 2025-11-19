@@ -5,7 +5,6 @@ from pathlib import Path
 
 from cpc_analyzer import CpcGenericAnalyzer
 from time_wall_calculator import TimeWallCalculator
-from dag_visualizer import DagVisualizer
 
 
 DEFAULT_INPUT_PATH = Path(__file__).with_name("input_dag.json")
@@ -119,65 +118,23 @@ def main():
         )
     num_cores = int(num_cores)
 
-    # Visualization if requested (before analysis)
-    if args.visualize:
-        print("=" * 60)
-        print("DAG VISUALIZATION")
-        print("=" * 60)
-        visualizer = DagVisualizer(args.dag_path)
-        
-        if args.viz_stats:
-            visualizer.print_statistics()
-            print()
-        
-        print("Generating visualization...")
-        visualizer.visualize(
-            output_path=args.viz_output,
-            layout=args.viz_layout,
-            figsize=(20, 12),
-            show_legend=True,
-            dpi=150
-        )
-        print()
-    
     print(f"Analyzing makespan with CPC model (Generic) on {num_cores} cores...")
     print(f"Loaded DAG from {args.dag_path}\n")
 
     analyzer = CpcGenericAnalyzer(dag, num_cores, verbose=args.verbose)
 
     print("--- CPC Model Constructed ---")
-    print(f"Critical Path: {analyzer.critical_path}")
-    for p in analyzer.providers:
-        print(f"Provider {p}:")
-        print(f"  F = {analyzer.consumers_F[tuple(p)]}")
-        print(f"  G = {analyzer.consumers_G[tuple(p)]}")
-    print("-" * 20)
+    # print(f"Critical Path: {analyzer.critical_path}")
+    # for p in analyzer.providers:
+    #     print(f"Provider {p}:")
+    #     print(f"  F = {analyzer.consumers_F[tuple(p)]}")
+    #     print(f"  G = {analyzer.consumers_G[tuple(p)]}")
+    # print("-" * 20)
 
     max_makespan, _ = analyzer.analyze()
 
     print(f"\nFinal Calculated Max Makespan (CPC Generic): {max_makespan:.2f}")
     
-    # Generate visualization with critical path highlighted if requested
-    if args.visualize and hasattr(analyzer, 'critical_path'):
-        print("\nGenerating visualization with critical path highlighted...")
-        visualizer = DagVisualizer(args.dag_path)
-        
-        # Create output path for critical path visualization
-        if args.viz_output:
-            output_path = args.viz_output.parent / f"{args.viz_output.stem}_critical_path{args.viz_output.suffix}"
-        else:
-            output_path = None
-        
-        visualizer.visualize(
-            output_path=output_path,
-            layout=args.viz_layout,
-            figsize=(20, 12),
-            show_legend=True,
-            highlight_critical_path=True,
-            critical_path=analyzer.critical_path,
-            dpi=150
-        )
-
     # Time wall calculation if requested
     if args.calc_time_wall:
         print("\n" + "=" * 60)
